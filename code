@@ -1,0 +1,46 @@
+import geopandas as gpd
+import pandas as pd
+import zipfile
+import os
+
+def extract_shapefile(zip_path, extract_to):
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(extract_to)
+    for root, _, files in os.walk(extract_to):
+        for file in files:
+            if file.endswith('.shp'):
+                return os.path.join(root, file)
+    raise FileNotFoundError("Arquivo .shp não encontrado no zip.")
+
+def get_neighbors(gdf):
+    neighbors = []
+    for idx, municipality in gdf.iterrows():
+        touching = gdf[gdf.geometry.touches(municipality.geometry)]
+        for _, neighbor in touching.iterrows():
+            neighbors.append((municipality['Nome_Município'], neighbor['Nome_Município']))
+    return neighbors
+
+def process_states(gdf, output_dir):
+    for estado in gdf['Nome_UF'].unique():
+        gdf_estado = gdf[gdf['Nome_UF'] == estado]
+        neighbors_list = get_neighbors(gdf_estado)
+        neighbors_df = pd.DataFrame(neighbors_list, columns=['cidade', 'cidade lim'])
+        csv_path = os.path.join(output_dir, f'municipios_limitrofes_{estado}.csv')
+        neighbors_df.to_csv(csv_path, index=False)
+        print(f'Arquivo para o estado {estado} salvo em {csv_path}')
+
+def main():
+    zip_path = r'C:\Users\fabr\OneDrive\Área de Trabalho\BR_Municipios_2022.zip'
+    extract_to = r'C:\Users\fabr\OneDrive\Área de Trabalho\extracted_files'
+    xls_path = r'C:\Users\fabr\OneDrive\Área de Trabalho\RELATORIO_DTB_BRASIL_MUNICIPIO.xls'
+    output_dir = r'C:\Users\fabr\OneDrive\Área de Trabalho\'
+
+    shapefile_path = extract_shapefile(zip_path, extract_to)
+    gdf = gpd.read_file(shapefile_path)
+    df_info = pd.read_excel(xls_path)
+
+    gdf = gdf.merge(df_info, left_on='NM_MUN', right_on='Nome_Município')
+    process_states(gdf, output_dir)
+
+if __name__ == "__main__":
+    main()
